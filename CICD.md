@@ -2,7 +2,7 @@
 
 > **Course**: Agile DevOps | **Semester**: 7 | **University**: PDEU
 
-This document explains the complete CI/CD (Continuous Integration / Continuous Deployment) pipeline built for the AirPass project using **GitHub Actions**, **Docker**, and standard DevOps best practices.
+This document explains the complete CI/CD (Continuous Integration / Continuous Deployment) pipeline built for the AirPass project using **GitHub Actions** and standard DevOps best practices.
 
 ---
 
@@ -12,10 +12,9 @@ This document explains the complete CI/CD (Continuous Integration / Continuous D
 2. [Repository Structure](#repository-structure)
 3. [CI/CD Pipeline Flow](#cicd-pipeline-flow)
 4. [Pipeline Stages Explained](#pipeline-stages-explained)
-5. [Docker Setup](#docker-setup)
-6. [How to Use](#how-to-use)
-7. [Configuration Files Reference](#configuration-files-reference)
-8. [Branching Strategy](#branching-strategy)
+5. [How to Use](#how-to-use)
+6. [Configuration Files Reference](#configuration-files-reference)
+7. [Branching Strategy](#branching-strategy)
 
 ---
 
@@ -27,7 +26,6 @@ This document explains the complete CI/CD (Continuous Integration / Continuous D
 |------|-----|
 | Dependency installation | Ensures consistent, reproducible builds |
 | Automated testing | Catches bugs before they reach production |
-| Docker image building | Creates a portable, deployable container |
 | Deployment simulation | Demonstrates production deploy flow |
 
 ---
@@ -38,8 +36,7 @@ This document explains the complete CI/CD (Continuous Integration / Continuous D
 AirPass-main/
 ├── .github/
 │   └── workflows/
-│       ├── ci-cd.yml              ← Main CI/CD pipeline (4 stages)
-│       └── docker-publish.yml     ← Docker image publish on release
+│       └── ci-cd.yml              ← Main CI/CD pipeline (3 stages)
 ├── tests/
 │   └── health.test.js             ← Automated health check test
 ├── public/                        ← Frontend static files
@@ -47,8 +44,6 @@ AirPass-main/
 ├── start.js                       ← Server entry point
 ├── package.json                   ← Dependencies & scripts
 ├── package-lock.json              ← Locked dependency versions
-├── Dockerfile                     ← Docker container definition
-├── .dockerignore                  ← Files excluded from Docker build
 ├── .gitignore                     ← Files excluded from Git
 ├── .env.example                   ← Environment variable template
 ├── vercel.json                    ← Vercel deployment config
@@ -59,27 +54,24 @@ AirPass-main/
 
 ## CI/CD Pipeline Flow
 
-The pipeline triggers automatically on code changes and runs through 4 sequential stages:
+The pipeline triggers automatically on code changes and runs through 3 sequential stages:
 
 ```mermaid
 flowchart LR
     A["📦 Install\nDependencies"] --> B["🧪 Run\nTests"]
-    B --> C["🐳 Build\nDocker Image"]
-    C --> D["🚀 Deploy\n(main only)"]
+    B --> C["🚀 Deploy\n(main only)"]
 
     style A fill:#2196F3,color:#fff,stroke:#1565C0
     style B fill:#FF9800,color:#fff,stroke:#E65100
-    style C fill:#4CAF50,color:#fff,stroke:#2E7D32
-    style D fill:#9C27B0,color:#fff,stroke:#6A1B9A
+    style C fill:#9C27B0,color:#fff,stroke:#6A1B9A
 ```
 
 ### Trigger Conditions
 
 | Event | Branches | What Runs |
 |-------|----------|-----------|
-| `push` | `main`, `develop` | All 4 stages (deploy only on `main`) |
-| `pull_request` | `main` | Stages 1–3 (no deploy) |
-| `release` published | any | Docker publish workflow |
+| `push` | `main`, `develop` | All 3 stages (deploy only on `main`) |
+| `pull_request` | `main` | Stages 1–2 (no deploy) |
 
 ---
 
@@ -120,32 +112,14 @@ Job: test → needs: install → runs-on: ubuntu-latest
 - ✅ Response body is `{"status": "ok"}`
 - ✅ The server shuts down cleanly without errors
 
-**If tests fail:** The pipeline stops here — no Docker build or deploy happens.
+**If tests fail:** The pipeline stops here — no deploy happens.
 
 ---
 
-### Stage 3: 🐳 Build Docker Image
+### Stage 3: 🚀 Deploy
 
 ```
-Job: build → needs: test → runs-on: ubuntu-latest
-```
-
-**What it does:**
-1. Builds a Docker image from the `Dockerfile`
-2. Tags it with the Git commit SHA: `airpass:<commit-sha>`
-3. Verifies the image was created successfully
-
-**Why Docker?**
-- Creates a consistent, portable deployment package
-- The same image runs identically on any machine
-- Isolates the app from the host system
-
----
-
-### Stage 4: 🚀 Deploy
-
-```
-Job: deploy → needs: build → runs-on: ubuntu-latest
+Job: deploy → needs: test → runs-on: ubuntu-latest
 Condition: only on push to main branch
 ```
 
@@ -159,53 +133,7 @@ Condition: only on push to main branch
 | Platform | Command |
 |----------|---------|
 | **Vercel** | `npx vercel --prod --token $VERCEL_TOKEN` |
-| **Docker Registry** | `docker push your-registry/airpass:$TAG` |
 | **SSH Server** | `ssh user@server 'cd /app && git pull && npm ci && pm2 restart'` |
-
----
-
-## Docker Setup
-
-### Dockerfile Breakdown
-
-```dockerfile
-FROM node:18-alpine          # Lightweight base image (~50MB vs ~350MB for full)
-WORKDIR /app                 # Set working directory
-COPY package*.json ./        # Copy dependency files first (layer caching)
-RUN npm ci --omit=dev        # Install only production dependencies
-COPY . .                     # Copy application source
-EXPOSE 5000                  # Document the port
-HEALTHCHECK ...              # Auto-monitor container health
-CMD ["node", "server.js"]    # Start the application
-```
-
-### Docker Commands
-
-```bash
-# Build the image
-docker build -t airpass:latest .
-
-# Run the container
-docker run -d -p 5000:5000 --name airpass airpass:latest
-
-# Check container health
-docker ps    # STATUS should show "(healthy)"
-
-# View logs
-docker logs airpass
-
-# Stop and remove
-docker stop airpass && docker rm airpass
-```
-
-### .dockerignore
-
-Files excluded from the Docker build context to keep the image small and secure:
-- `node_modules/` — reinstalled inside container
-- `.git/`, `.github/` — version control, not needed at runtime
-- `tests/` — not needed in production
-- `.env` files — secrets should be injected at runtime
-- IDE files, docs, Dockerfile itself
 
 ---
 
@@ -215,7 +143,6 @@ Files excluded from the Docker build context to keep the image small and secure:
 - GitHub account
 - Git installed locally
 - Node.js v18+ (for local development)
-- Docker (optional, for local container testing)
 
 ### Step-by-Step: Push to GitHub and Trigger Pipeline
 
@@ -260,16 +187,7 @@ npm start
 ## Configuration Files Reference
 
 ### `.github/workflows/ci-cd.yml`
-The main CI/CD pipeline with 4 stages. Triggers on push to `main`/`develop` and PRs to `main`.
-
-### `.github/workflows/docker-publish.yml`
-Builds and publishes Docker images to GitHub Container Registry when a GitHub Release is published. Tags with both the release version and `latest`.
-
-### `Dockerfile`
-Defines the production container: Node.js 18 Alpine, production dependencies only, health check included.
-
-### `.dockerignore`
-Keeps the Docker build context lean by excluding dev files, tests, docs, and version control.
+The main CI/CD pipeline with 3 stages. Triggers on push to `main`/`develop` and PRs to `main`.
 
 ### `.gitignore`
 Excludes `node_modules/`, environment secrets (`.env`), OS junk files, IDE configs, build outputs, and temporary files. Keeps `.env.example` for reference.
@@ -305,8 +223,8 @@ flowchart LR
 | Branch | Purpose | Pipeline Behavior |
 |--------|---------|-------------------|
 | `feature/*` | New features, bug fixes | No pipeline (create PR to trigger) |
-| `develop` | Integration branch | Runs Install → Test → Build |
-| `main` | Production-ready code | Runs all 4 stages including Deploy |
+| `develop` | Integration branch | Runs Install → Test |
+| `main` | Production-ready code | Runs all 3 stages including Deploy |
 
 ### Workflow
 
@@ -322,23 +240,23 @@ flowchart LR
 ## 📊 Pipeline Summary
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    AirPass CI/CD Pipeline                       │
-├─────────────┬───────────────┬────────────────┬─────────────────┤
-│  📦 Install  │   🧪 Test     │  🐳 Docker     │  🚀 Deploy      │
-│             │               │    Build       │  (main only)    │
-├─────────────┼───────────────┼────────────────┼─────────────────┤
-│ checkout    │ checkout      │ checkout       │ checkout        │
-│ setup node  │ setup node    │ docker build   │ deploy step     │
-│ npm ci      │ restore cache │ tag with SHA   │ (simulation)    │
-│ cache deps  │ npm test      │ verify image   │                 │
-└─────────────┴───────────────┴────────────────┴─────────────────┘
-        │              │              │               │
-        ▼              ▼              ▼               ▼
-     ~30 sec        ~15 sec        ~45 sec         ~5 sec
+┌─────────────────────────────────────────────────────────┐
+│                  AirPass CI/CD Pipeline                  │
+├─────────────────┬───────────────────┬───────────────────┤
+│  📦 Install      │   🧪 Test          │  🚀 Deploy        │
+│                 │                   │  (main only)      │
+├─────────────────┼───────────────────┼───────────────────┤
+│ checkout        │ checkout          │ checkout          │
+│ setup node 18   │ setup node 18     │ deploy step       │
+│ npm ci          │ restore cache     │ (simulation)      │
+│ cache deps      │ npm test          │                   │
+└─────────────────┴───────────────────┴───────────────────┘
+        │                  │                  │
+        ▼                  ▼                  ▼
+     ~30 sec            ~15 sec            ~5 sec
 ```
 
-> **Total pipeline time:** ~2 minutes (approximate)
+> **Total pipeline time:** ~1 minute (approximate)
 
 ---
 
@@ -349,9 +267,6 @@ A: GitHub Actions is free for public repos, tightly integrated with GitHub, and 
 
 **Q: Why is the deploy stage a simulation?**
 A: To keep the pipeline self-contained without requiring external credentials. Replace the simulation step with your actual deployment commands when ready.
-
-**Q: Can I skip the Docker build stage?**
-A: Yes! Remove or comment out the `build` job in `ci-cd.yml` and change `deploy.needs` from `build` to `test`.
 
 **Q: How do I add more tests?**
 A: Add more test logic in `tests/health.test.js` or create additional test files and update the `test` script in `package.json`.

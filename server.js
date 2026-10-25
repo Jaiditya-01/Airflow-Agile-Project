@@ -1,7 +1,7 @@
 const express = require("express");
 const path = require("path");
 const multer = require("multer");
-const { v4: uuidv4 } = require("uuid");
+const crypto = require("crypto");
 const cors = require("cors");
 const archiver = require("archiver");
 const { createServer } = require("http");
@@ -112,7 +112,7 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
     return res.status(400).json({ message: "No file uploaded" });
   }
 
-  const key = uuidv4().slice(0, 8).toUpperCase(); // short 8-char key, uppercase
+  const key = crypto.randomUUID().slice(0, 8).toUpperCase(); // short 8-char key, uppercase
   
   // Calculate expiry time
   const expiryMs = convertExpiryToMs(req.body.expiryValue, req.body.expiryUnit);
@@ -140,7 +140,7 @@ app.post("/api/upload-multiple", upload.array("files"), async (req, res) => {
       return res.status(400).json({ message: "No files uploaded" });
     }
 
-    const key = uuidv4().slice(0, 8).toUpperCase(); // short 8-char key, uppercase
+    const key = crypto.randomUUID().slice(0, 8).toUpperCase(); // short 8-char key, uppercase
     
     // Calculate expiry time
     const expiryMs = convertExpiryToMs(req.body.expiryValue, req.body.expiryUnit);
