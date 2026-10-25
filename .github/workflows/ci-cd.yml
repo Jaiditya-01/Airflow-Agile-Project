@@ -1,0 +1,107 @@
+# ══════════════════════════════════════════════════════════════
+# AirPass CI/CD Pipeline
+# ══════════════════════════════════════════════════════════════
+# This pipeline runs on every push to main/develop and on PRs
+# to main. It installs dependencies, runs tests, builds a
+# Docker image, and (on main) simulates a production deploy.
+# ══════════════════════════════════════════════════════════════
+
+name: AirPass CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ──────────────────────────────────────────
+  # Stage 1: Install Dependencies
+  # ──────────────────────────────────────────
+  install:
+    name: 📦 Install Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache node_modules for later jobs
+        uses: actions/cache/save@v4
+        with:
+          path: node_modules
+          key: nm-${{ hashFiles('package-lock.json') }}
+
+  # ──────────────────────────────────────────
+  # Stage 2: Run Tests
+  # ──────────────────────────────────────────
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Restore cached node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: nm-${{ hashFiles('package-lock.json') }}
+
+      - name: Run tests
+        run: npm test
+
+  # ──────────────────────────────────────────
+  # Stage 3: Build Docker Image
+  # ──────────────────────────────────────────
+  build:
+    name: 🐳 Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t airpass:${{ github.sha }} .
+
+      - name: Verify image was created
+        run: docker images airpass
+
+  # ──────────────────────────────────────────
+  # Stage 4: Deploy (only on push to main)
+  # ──────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying AirPass to production..."
+          echo "   Commit: ${{ github.sha }}"
+          echo "   Branch: ${{ github.ref_name }}"
+          echo "✅ Deployment simulation complete!"
+          echo ""
+          echo "ℹ️  To deploy for real, replace this step with:"
+          echo "   - Vercel CLI: npx vercel --prod --token \$VERCEL_TOKEN"
+          echo "   - Docker push: docker push your-registry/airpass:\$TAG"
+          echo "   - SSH deploy: ssh user@server 'cd /app && git pull && npm ci && pm2 restart'"
